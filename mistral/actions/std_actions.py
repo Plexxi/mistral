@@ -15,12 +15,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from email.header import Header
+from email import header
 from email.mime import text
 
 import json
 import requests
+import six
 import smtplib
+import time
 
 from mistral.actions import base
 from mistral import exceptions as exc
@@ -141,6 +143,11 @@ class HTTPAction(base.Action):
             self.auth = (auth.split(':')[0], auth.split(':')[1])
         else:
             self.auth = auth
+
+        if isinstance(headers, dict):
+            for key, val in headers.items():
+                if isinstance(val, (six.integer_types, float)):
+                    headers[key] = str(val)
 
         self.url = url
         self.method = method
@@ -269,13 +276,13 @@ class MistralHTTPAction(HTTPAction):
 
 class SendEmailAction(base.Action):
     def __init__(self, from_addr, to_addrs, smtp_server,
-                 smtp_password, subject=None, body=None):
+                 smtp_password=None, subject=None, body=None):
         # TODO(dzimine): validate parameters
 
         # Task invocation parameters.
         self.to = to_addrs
         self.subject = subject or "<No subject>"
-        self.body = body
+        self.body = body or "<No body>"
 
         # Action provider settings.
         self.smtp_server = smtp_server
@@ -289,7 +296,7 @@ class SendEmailAction(base.Action):
                   self.smtp_server, self.body[:128]))
 
         message = text.MIMEText(self.body, _charset='utf-8')
-        message['Subject'] = Header(self.subject, 'utf-8')
+        message['Subject'] = header.Header(self.subject, 'utf-8')
         message['From'] = self.sender
         message['To'] = ', '.join(self.to)
 
@@ -432,3 +439,29 @@ class JavaScriptAction(base.Action):
 
     def test(self):
         return self.script
+
+
+class SleepAction(base.Action):
+    """Sleep action.
+
+    This action sleeps for given amount of seconds. It can be mostly useful
+    for testing and debugging purposes.
+    """
+    def __init__(self, seconds=1):
+        try:
+            self._seconds = int(seconds)
+            self._seconds = 0 if self._seconds < 0 else self._seconds
+        except ValueError:
+            self._seconds = 0
+
+    def run(self):
+        LOG.info('Running sleep action [seconds=%s]' % self._seconds)
+
+        time.sleep(self._seconds)
+
+        return None
+
+    def test(self):
+        time.sleep(1)
+
+        return None
