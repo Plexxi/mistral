@@ -33,6 +33,7 @@ def get_yaql_context(data_context):
         ROOT_YAQL_CONTEXT = yaql.create_context()
 
         _register_yaql_functions(ROOT_YAQL_CONTEXT)
+
     new_ctx = ROOT_YAQL_CONTEXT.create_child_context()
     new_ctx['$'] = data_context
 
@@ -62,7 +63,7 @@ def get_jinja_context(data_context):
 def get_custom_functions():
     """Get custom functions
 
-    Retreives the list of custom evaluation functions
+    Retrieves the list of custom evaluation functions
     """
     functions = dict()
 
@@ -70,6 +71,7 @@ def get_custom_functions():
         namespace='mistral.expression.functions',
         invoke_on_load=False
     )
+
     for name in mgr.names():
         functions[name] = mgr[name].plugin
 
@@ -117,13 +119,18 @@ def json_pp_(context, data=None):
     ).replace("\\n", "\n").replace(" \n", "\n")
 
 
-def task_(context, task_name):
-
+def task_(context, task_name=None):
     # This section may not exist in a context if it's calculated not in
     # task scope.
     cur_task = context['__task_execution']
 
-    if cur_task and cur_task['name'] == task_name:
+    # 1. If task_name is empty it's 'task()' use case, we need to get the
+    # current task.
+    # 2. if task_name is not empty but it's equal to the current task name
+    # we need to take exactly the current instance of this task. Otherwise
+    # there may be ambiguity if there are many tasks with this name.
+    # 3. In other case we just find a task in DB by the given name.
+    if cur_task and (not task_name or cur_task['name'] == task_name):
         task_ex = db_api.get_task_execution(cur_task['id'])
     else:
         task_execs = db_api.get_task_executions(
