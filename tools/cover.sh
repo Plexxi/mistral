@@ -1,8 +1,5 @@
 #!/bin/bash
 #
-# Copyright 2015: Mirantis Inc.
-# All Rights Reserved.
-#
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -35,6 +32,9 @@ baseline_missing=$(awk 'END { print $3 }' $baseline_report)
 # Checkout back and unstash uncommitted changes (if any)
 git checkout -
 [[ -n $uncommitted ]] && git stash pop > /dev/null
+
+# Erase previously collected coverage data.
+coverage erase;
 
 # Generate and save coverage report
 current_report=$(mktemp -t mistral_coverageXXXXXXX)

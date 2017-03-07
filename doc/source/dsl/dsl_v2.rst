@@ -205,7 +205,7 @@ attributes:
    Published variables will be accessible for downstream tasks via using
    expressions. *Optional*.
 -  **publish-on-error** - Same as **publish** but evaluated in case of
-    task execution failures. *Optional*
+   task execution failures. *Optional*
 -  **with-items** - If configured, it allows to run action or workflow
    associated with a task multiple times on a provided list of items.
    See `Processing collections using
@@ -412,6 +412,19 @@ Direct workflow task attributes
    completed with an error. *Optional*.
 -  **on-complete** - List of tasks which will run after the task has
    completed regardless of whether it is successful or not. *Optional*.
+
+It is important to understand the semantics of **on-success**, **on-error**
+and **on-complete** around handling action errors.
+
+In case if task action returned an error **on-success** and **on-complete**
+won't prevent from failing the entire workflow execution. Only **on-error**
+will. The closest analogy is *try-catch-finally* blocks in regular
+programming languages. **on-error** is similar to *catch* and it serves
+as an exception handler for possible errors expected by design. Whereas
+**on-complete** is like *finally* that will run in any case but it won't
+stop the exception from bubbling up to an upper layer. So **on-complete**
+should only be understood as a language construction that allows to
+define some clean up actions.
 
 Transitions with YAQL expressions
 '''''''''''''''''''''''''''''''''
@@ -1069,8 +1082,147 @@ OpenStack context is available by **$.openstack**. It contains
 **auth_token,** **project_id**, **user_id**, **service_catalog**,
 **user_name**, **project_name**, **roles**, **is_admin** properties.
 
+
+Builtin functions in expressions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In addition to the current context (i.e. $ in YAQL and _ in Jinja2) expressions
+have access to a set of predefined functions.
+
+
+The expression languages come with their own individual included functions and
+operations. Mistral adds the following functions that are available in all the
+supported languages.
+
+This section will describe builtin functions added by Mistral.
+
+Tasks function
+''''''''''''''
+
+Signature:
+  **tasks(workflow_execution_id=null, recursive=false, state=null, flat=false)**
+
+Description:
+
+  This function allows users to filter all tasks by workflow execution id
+  and/or state. In addition, it is possible to get task executions recursively
+  and flatten the task executions list.
+
+Parameters:
+
+  #. **workflow_execution_id** - If provided the tasks function will return
+     task executions for a specific workflow execution (either the current
+     execution or a different one). Otherwise it will return all task
+     executions that match the other parameters. *Optional.*
+  #. **recursive** - This parameter is a boolean value, if it is true then all
+     task executions within nested workflow executions will be returned. This
+     is usually used in combination with a specific workflow_execution_id
+     where you still want to see nested workflow's task executions. *Optional.*
+     False by default.
+  #. **state** - If provided, the task executions will be filtered by their
+     current state. If state isn't provided, all task executions that match the
+     other parameters will be returned . *Optional.*
+  #. **flat** - if true, only list the task executions that match at least one
+     of the next conditions:
+
+       * task executions of type action
+       * task executions of type workflow that have a different state from the
+         workflow execution they triggered. For example, if used with a
+         specific workflow_execution_id and the state ERROR it will return
+         tasks that erred despite the workflow succeeding. This can mean that
+         there was an error in the task itself, like an invalid expression in
+         publish.
+
+     *Optional.* False by default.
+
+Example:
+
+Workflow definition:
+
+.. code-block:: yaml
+
+  ---
+  version: "v2.0"
+  wf:
+  tasks:
+    task:
+      action: std.noop
+      publish:
+        all_tasks_in_this_wf_yaql: <% tasks(execution().id) %>
+        all_tasks_in_this_wf_jinja: "{{ tasks(execution().id) }}"
+
+        all_tasks_in_error_yaql: <% tasks(null, false, ERROR) %>
+        all_tasks_in_error_jinja: "{{ tasks(None, false, 'ERROR') }}"
+        all_tasks_in_error_yaql_with_kw: <% tasks(state => ERROR) %>
+        all_tasks_in_error_jinja_with_kw: "{{ tasks(state='ERROR') }}"
+
+        all_tasks_yaql_option1: <% tasks() %>
+        all_tasks_yaql_option2: <% tasks(null, false, null, false) %>
+        all_tasks_jinja_option1: "{{ tasks() }}"
+        all_tasks_jinja_option2: "{{ tasks(None, false, None, false) }}"
+
+Task publish result (partial to keep the documentation short):
+
+.. warning::
+  The return value for each task execution hasn't been finalized and isn't
+  considered stable. It may change in a future Mistral release.
+
+.. code-block:: json
+
+  {
+    "all_tasks_in_error_yaql": [
+      {
+        "id": "3d363d4b-8c19-48fa-a9a0-8721dc5469f2",
+        "name": "fail_task",
+        "type": "ACTION",
+        "workflow_execution_id": "c0a4d2ff-0127-4826-8370-0570ef8cad80",
+        "state": "ERROR",
+        "state_info": "Failed to run action [action_ex_id=bcb04b28-6d50-458e-9b7e-a45a5ff1ca01, action_cls='<class 'mistral.actions.action_factory.FailAction'>', attributes='{}', params='{}']\n Fail action expected exception.",
+        "result": "Failed to run action [action_ex_id=bcb04b28-6d50-458e-9b7e-a45a5ff1ca01, action_cls='<class 'mistral.actions.action_factory.FailAction'>', attributes='{}', params='{}']\n Fail action expected exception.",
+        "published": {},
+        "spec": {
+          "action": "std.fail",
+          "version": "2.0",
+          "type": "direct",
+          "name": "fail_task"
+        }
+      }
+    ],
+    "all_tasks_in_this_wf_jinja": [
+      {
+        "id": "83a34bfe-268c-46f5-9e5c-c16900540084",
+        "name": "task",
+        "type": "ACTION",
+        "workflow_execution_id": "899a3318-b5c0-4860-82b4-a5bd147a4643",
+        "state": "SUCCESS",
+        "state_info": null,
+        "result": null,
+        "published": {},
+        "spec": {
+          "action": "std.noop",
+          "version": "2.0",
+          "type": "direct",
+          "name": "task",
+          "publish": {
+            "all_tasks_in_error_yaql": "<% tasks(null, false, ERROR) %>",
+            "all_tasks_in_error_jinja": "{{ tasks(None, false, 'ERROR') }}",
+            "all_tasks_yaql_option2": "<% tasks(null, false, false, false) %>",
+            "all_tasks_yaql_option1": "<% tasks() %>",
+            "all_tasks_jinja_option1": "{{ tasks() }}",
+            "all_tasks_in_error_jinja_with_kw": "{{ tasks(state='ERROR') }}",
+            "all_tasks_jinja_option2": "{{ tasks(None, false, None, false) }}",
+            "all_tasks_in_this_wf_jinja": "{{ tasks(execution().id) }}",
+            "all_tasks_in_this_wf_yaql": "<% tasks(execution().id) %>"
+          }
+        }
+      }
+    ],
+    "_comment": "other fields were dropped to keep docs short"
+  }
+
+
 Task result
-^^^^^^^^^^^
+'''''''''''
 
 Task result is available by **task(<task_name>).result**. It contains task result
 and directly depends on action output structure. Note that the *task(<task_name>)*

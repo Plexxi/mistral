@@ -240,6 +240,8 @@ class DbTestCase(BaseTest):
         if cfg.CONF.database.connection.startswith('sqlite'):
             cfg.CONF.set_default('connection', 'sqlite://', group='database')
 
+        cfg.CONF.set_default("openstack_actions_mapping_path",
+                             "tests/resources/openstack/test_mapping.json")
         cfg.CONF.set_default('max_overflow', -1, group='database')
         cfg.CONF.set_default('max_pool_size', 1000, group='database')
 
@@ -248,7 +250,7 @@ class DbTestCase(BaseTest):
         action_manager.sync_db()
 
     def _clean_db(self):
-        lookup_utils.clean_caches()
+        lookup_utils.clear_caches()
 
         contexts = [
             get_context(default=False),
